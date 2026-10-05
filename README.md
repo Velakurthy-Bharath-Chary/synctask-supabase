@@ -1,89 +1,88 @@
-# ⚡ SyncTask - Distributed Collaborative Task Manager
+# TaskSyncer
 
-A full-stack real-time collaborative task management system built with FastAPI, React, PostgreSQL, and WebSockets.
+TaskSyncer is a collaborative task manager with a FastAPI backend, React frontend, PostgreSQL database, and WebSocket updates.
 
-## 🚀 Features
+## What’s in this repository?
 
-- 🔐 JWT Authentication (Register/Login)
-- 👥 Role-based access control (Admin/Member)
-- 📋 Kanban board (To Do / In Progress / Done)
-- ⚡ Real-time updates via WebSockets
-- 🔔 Live notification bell
-- 📊 Analytics dashboard with charts
-- 🐳 Docker support
+| Path | Purpose |
+| --- | --- |
+| `backend/app/routers/` | HTTP and WebSocket endpoints |
+| `backend/app/services/` | Application rules and database operations |
+| `backend/app/models/` | SQLAlchemy database tables and relationships |
+| `backend/app/schemas/` | Request and response validation |
+| `backend/app/core/` | Authentication, shared dependencies, and WebSocket support |
+| `frontend/src/pages/` | Screen-level React components |
+| `frontend/src/components/` | Reusable UI components |
+| `frontend/src/api/` | HTTP client and API calls |
+| `frontend/src/context/` | Login state and WebSocket state |
+| `docs/` | Project map and development notes |
+| `screenshots/` | App screenshots used in this README |
 
-## 🛠️ Tech Stack
+See [docs/PROJECT_MAP.md](docs/PROJECT_MAP.md) for a longer guide to where features belong.
 
-### Backend
-- Python 3.10
-- FastAPI
-- PostgreSQL
-- SQLAlchemy
-- WebSockets
-- JWT Authentication
+## Run locally on Windows
 
-### Frontend
-- React 18
-- Tailwind CSS
-- Recharts
-- Axios
-- React Router
+Open two PowerShell terminals from the repository root.
 
-## 📦 Installation
+### 1. Start the backend
 
-### Prerequisites
-- Python 3.10+
-- Node.js 18+
-- PostgreSQL
+Create and activate the root virtual environment once, then install backend packages:
 
-### Backend Setup
-```bash
-cd backend
-python -m venv venv
-venv\Scripts\activate
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
-uvicorn app.main:app --reload --port 8000
 ```
 
-### Frontend Setup
-```bash
+Configure the backend’s local `backend/.env` with your database and authentication settings. Do not commit this file.
+
+Then start the API:
+
+```powershell
+cd backend
+..\.venv\Scripts\Activate.ps1
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+### 2. Start the frontend
+
+```powershell
 cd frontend
 npm install
 npm start
 ```
 
-### Docker Setup
-```bash
-docker-compose up
-```
+Open `http://localhost:3000` on the laptop. The API is at `http://localhost:8000`; API documentation is at `http://localhost:8000/docs`.
 
-## 🌐 Usage
+## Open the development app on a phone
 
-- Frontend: http://localhost:3000
-- Backend API: http://localhost:8000
-- API Docs: http://localhost:8000/docs
+Keep both terminals running and connect the laptop and phone to the same Wi-Fi. Open the React **On Your Network** URL printed by `npm start`, usually `http://<laptop-wifi-ip>:3000`. The backend must be started with `--host 0.0.0.0`, as shown above. If the phone cannot connect to port 8000, allow Python through Windows Firewall on the private network.
 
-## 📸 Screenshots
+The laptop’s Wi-Fi IP can change after a restart or router lease renewal. Check the React startup output or run `ipconfig` and use the Wi-Fi IPv4 address. A DHCP reservation in the router can keep the laptop’s address stable. The laptop must remain awake and both development servers must remain running.
 
-### Login Page
-![Login](screenshots/login.png)
-![Login](screenshots/login1.png)
+## Security note
+
+If a password or signing key was committed to Git, rotate it. Deleting or editing the file does not remove its contents from earlier commits.
+
+## Screenshots
+
+### Login
+
+![Login page](screenshots/login.png)
+![Login page](screenshots/login1.png)
+
 ### Dashboard
+
 ![Dashboard](screenshots/dashboard.png)
 
-### Kanban Board
-![Kanban](screenshots/kanban.png)
+### Kanban board
+
+![Kanban board](screenshots/kanban.png)
 
 ### Analytics
+
 ![Analytics](screenshots/analytics.png)
 
-## 👨‍💻 Author
+## License
 
-**Velakurthy Bharath Chary**
-- GitHub: [@Velakurthy-Bharath-Chary](https://github.com/Velakurthy-Bharath-Chary)
-
-## 📝 License
-
-This project is open source and available under the [MIT License](LICENSE).
-uvicorn app.main:app --reload --port 8000
-npm start
+This project is available under the MIT License; see [LICENSE](LICENSE).

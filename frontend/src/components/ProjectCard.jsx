@@ -5,7 +5,7 @@ import { useAuth } from "../context/AuthContext";
 export default function ProjectCard({ project, isMember, onDeleted }) {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const isAdmin = user?.role === "admin";
+  const isOwner = project.owner_id === user?.id;
 
   const handleDelete = async (e) => {
     e.stopPropagation();
@@ -31,10 +31,10 @@ export default function ProjectCard({ project, isMember, onDeleted }) {
         <div className="flex items-center gap-2">
           {isMember && (
             <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-medium">
-              Member
+              {isOwner ? "Owner" : "Member"}
             </span>
           )}
-          {isMember && isAdmin && (
+          {isMember && isOwner && (
             <button
               onClick={handleDelete}
               className="text-xs text-red-400 hover:text-red-600 font-medium"
@@ -50,8 +50,8 @@ export default function ProjectCard({ project, isMember, onDeleted }) {
         </p>
       )}
       <p className="text-xs text-gray-400">
-        {project.members?.length || 0} member
-        {project.members?.length !== 1 ? "s" : ""} •{" "}
+        {project.member_count ?? project.members?.length ?? 0} member
+        {(project.member_count ?? project.members?.length ?? 0) !== 1 ? "s" : ""} •{" "}
         {new Date(project.created_at).toLocaleDateString()}
       </p>
     </div>

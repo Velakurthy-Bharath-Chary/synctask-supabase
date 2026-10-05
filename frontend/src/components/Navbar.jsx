@@ -24,9 +24,6 @@ export default function Navbar() {
           <>
             {/* Desktop */}
             <div className="hidden sm:flex items-center gap-4">
-              <span className="text-sm bg-blue-800 px-2 py-1 rounded capitalize">
-                {user.role}
-              </span>
               <span className="text-sm">{user.username}</span>
               <NotificationBell />
               <button
@@ -55,9 +52,6 @@ export default function Navbar() {
       {menuOpen && user && (
         <div className="sm:hidden mt-3 border-t border-blue-500 pt-3 space-y-2">
           <div className="flex items-center gap-2">
-            <span className="text-sm bg-blue-800 px-2 py-1 rounded capitalize">
-              {user.role}
-            </span>
             <span className="text-sm">{user.username}</span>
           </div>
           <button

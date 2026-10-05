@@ -34,6 +34,17 @@ class ActivityAction(str, enum.Enum):
     COMMENT_ADDED = "COMMENT_ADDED"
 
 
+class TaskRequestType(str, enum.Enum):
+    STATUS = "STATUS"
+    DEADLINE = "DEADLINE"
+
+
+class TaskRequestStatus(str, enum.Enum):
+    PENDING = "PENDING"
+    APPROVED = "APPROVED"
+    REJECTED = "REJECTED"
+
+
 class Task(Base):
     __tablename__ = "tasks"
 
@@ -56,6 +67,26 @@ class Task(Base):
     creator = relationship("User", back_populates="created_tasks", foreign_keys=[created_by])
     activity_logs = relationship("ActivityLog", back_populates="task", cascade="all, delete-orphan")
     comments = relationship("Comment", back_populates="task", cascade="all, delete-orphan")
+    requests = relationship("TaskRequest", back_populates="task", cascade="all, delete-orphan")
+
+
+class TaskRequest(Base):
+    __tablename__ = "task_requests"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    task_id = Column(UUID(as_uuid=True), ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False, index=True)
+    requester_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    request_type = Column(Enum(TaskRequestType), nullable=False)
+    requested_status = Column(Enum(TaskStatus), nullable=True)
+    requested_deadline = Column(DateTime(timezone=True), nullable=True)
+    message = Column(Text, nullable=True)
+    status = Column(Enum(TaskRequestStatus), default=TaskRequestStatus.PENDING, nullable=False, index=True)
+    decision_note = Column(Text, nullable=True)
+    decided_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    task = relationship("Task", back_populates="requests")
+    requester = relationship("User")
 
 
 class ActivityLog(Base):

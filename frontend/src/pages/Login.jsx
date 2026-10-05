@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { login } from "../api/authApi";
 import { useAuth } from "../context/AuthContext";
+import { getApiBaseUrl } from "../api/axios";
 
 export default function Login() {
   const [form, setForm] = useState({ email: "", password: "" });
@@ -19,7 +20,9 @@ export default function Login() {
       loginSuccess(data);
       navigate("/");
     } catch (err) {
-      setError(err.response?.data?.detail || "Login failed. Check your credentials.");
+      setError(err.response?.data?.detail || (err.response
+        ? "Login failed. Check your credentials."
+        : `Cannot reach the API at ${getApiBaseUrl()}. Start the backend with --host 0.0.0.0 and allow Python through Windows Firewall on your private network.`));
     } finally {
       setLoading(false);
     }

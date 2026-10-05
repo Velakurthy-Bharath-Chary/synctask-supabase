@@ -1,8 +1,10 @@
 import re
 from uuid import UUID
-from sqlalchemy.orm import Session
+from sqlalchemy import func
+from sqlalchemy.orm import Session, selectinload
 from fastapi import HTTPException
 from app.models.project import Project, ProjectMember, ProjectRole
+from app.models.task import Task
 from app.schemas.project import ProjectCreate, ProjectUpdate
 
 
@@ -50,11 +52,13 @@ def get_user_projects(db: Session, user_id: UUID) -> list:
     return db.query(Project).filter(
         Project.id.in_(project_ids),
         Project.is_archived == False
-    ).all()
+    ).options(selectinload(Project.members).selectinload(ProjectMember.user)).all()
 
 
 def get_project(db: Session, project_id: UUID, user_id: UUID) -> Project:
-    project = db.query(Project).filter(Project.id == project_id).first()
+    project = db.query(Project).options(
+        selectinload(Project.members).selectinload(ProjectMember.user)
+    ).filter(Project.id == project_id, Project.is_archived == False).first()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
@@ -69,28 +73,11 @@ def get_project(db: Session, project_id: UUID, user_id: UUID) -> Project:
     return project
 
 
-def join_project(db: Session, project_id: UUID, user_id: UUID, role: ProjectRole = ProjectRole.member) -> ProjectMember:
-    project = db.query(Project).filter(Project.id == project_id).first()
-    if not project:
-        raise HTTPException(status_code=404, detail="Project not found")
-
-    # Check if already a member
-    existing = db.query(ProjectMember).filter(
-        ProjectMember.project_id == project_id,
-        ProjectMember.user_id == user_id
-    ).first()
-    if existing:
-        raise HTTPException(status_code=400, detail="Already a member")
-
-    member = ProjectMember(project_id=project_id, user_id=user_id, role=role)
-    db.add(member)
-    db.commit()
-    db.refresh(member)
-    return member
-
-
 def update_project(db: Session, project_id: UUID, data: ProjectUpdate, user_id: UUID) -> Project:
-    project = db.query(Project).filter(Project.id == project_id).first()
+    project = db.query(Project).filter(
+        Project.id == project_id,
+        Project.is_archived == False,
+    ).first()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     if project.owner_id != user_id:
@@ -111,11 +98,37 @@ def delete_project(db: Session, project_id: UUID, user_id: UUID):
     if project.owner_id != user_id:
         raise HTTPException(status_code=403, detail="Only the owner can delete this project")
 
-    # Soft delete by archiving
+    # Archive the project's tasks and release every assignee immediately.
+    # The project remains hidden in storage, but its work must not reserve
+    # members or remain available through task endpoints.
+    db.query(Task).filter(
+        Task.project_id == project_id,
+        Task.is_archived == False,
+    ).update(
+        {Task.is_archived: True, Task.assigned_to: None},
+        synchronize_session=False,
+    )
     project.is_archived = True
     db.commit()
 
 
 def get_all_projects(db: Session) -> list:
     """List all non-archived projects for browsing."""
-    return db.query(Project).filter(Project.is_archived == False).all()
+    member_counts = db.query(
+        ProjectMember.project_id.label("project_id"),
+        func.count(ProjectMember.id).label("member_count"),
+    ).group_by(ProjectMember.project_id).subquery()
+    rows = db.query(Project, func.coalesce(member_counts.c.member_count, 0)).outerjoin(
+        member_counts, Project.id == member_counts.c.project_id
+    ).filter(Project.is_archived == False).all()
+    return [
+        {
+            "id": project.id,
+            "name": project.name,
+            "description": project.description,
+            "owner_id": project.owner_id,
+            "created_at": project.created_at,
+            "member_count": member_count,
+        }
+        for project, member_count in rows
+    ]

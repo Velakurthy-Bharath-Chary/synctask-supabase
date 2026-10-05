@@ -3,7 +3,7 @@ import { useState, useEffect } from "react";
 const STATUSES = ["TODO", "IN_PROGRESS", "DONE"];
 const PRIORITIES = ["LOW", "MEDIUM", "HIGH"];
 
-export default function TaskModal({ task, members, onSave, onClose }) {
+export default function TaskModal({ task, members, membersError, membersLoading, onSave, onClose }) {
   const [form, setForm] = useState({
     title: "",
     description: "",
@@ -118,12 +118,18 @@ export default function TaskModal({ task, members, onSave, onClose }) {
               onChange={(e) => setForm({ ...form, assigned_to: e.target.value })}
             >
               <option value="">Unassigned</option>
-              {members?.map((m) => (
-                <option key={m.user.id} value={m.user.id}>
-                  {m.user.username}
+              {membersLoading && <option disabled value="">Loading employees…</option>}
+              {!membersLoading && !membersError && !members?.length && <option disabled value="">No employees available</option>}
+              {members?.filter((member) => !member.has_active_task).map((member) => (
+                <option key={member.id} value={member.id}>{member.username}</option>
+              ))}
+              {members?.filter((member) => member.has_active_task).map((member) => (
+                <option key={member.id} value={member.id} disabled>
+                  {member.username}
                 </option>
               ))}
             </select>
+            {membersError && <p className="text-xs text-red-600 mt-1">{membersError}</p>}
           </div>
 
           <div className="mb-4">

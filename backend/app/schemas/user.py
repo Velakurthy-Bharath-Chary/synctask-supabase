@@ -15,7 +15,6 @@ class UserCreate(BaseModel):
     username: str
     email: EmailStr
     password: str
-    role: UserRole = UserRole.member
     full_name: Optional[str] = None
 
 

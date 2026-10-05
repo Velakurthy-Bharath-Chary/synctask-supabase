@@ -12,12 +12,10 @@ const PRIORITY_COLORS = {
   HIGH: "text-red-600",
 };
 
-export default function TaskCard({ task, onEdit, onDelete, members }) {
+export default function TaskCard({ task, onEdit, onDelete, onRequest, members, isOwner, hasPendingRequest }) {
   const { user } = useAuth();
-  const isAdmin = user?.role === "admin";
   const isAssignedToMe = task.assigned_to === user?.id;
-  const canEdit = isAdmin || isAssignedToMe;
-  const assignee = members?.find((m) => m.user.id === task.assigned_to)?.user;
+  const assignee = members?.find((m) => m.user?.id === task.assigned_to)?.user;
 
   return (
     <div className="bg-white rounded-lg shadow p-4 border border-gray-100 hover:shadow-md transition-shadow">
@@ -54,15 +52,28 @@ export default function TaskCard({ task, onEdit, onDelete, members }) {
         )}
       </div>
 
-      {canEdit && (
+      {(isOwner || isAssignedToMe) && (
         <div className="flex gap-2 mt-3 pt-3 border-t border-gray-50">
-          <button
-            onClick={() => onEdit(task)}
-            className="text-xs text-blue-600 hover:underline font-medium"
-          >
-            Edit
-          </button>
-          {isAdmin && (
+          {isOwner ? (
+            <button
+              onClick={() => onEdit(task)}
+              className="text-xs text-blue-600 hover:underline font-medium"
+            >
+              Edit task
+            </button>
+          ) : (
+            hasPendingRequest ? (
+              <span className="text-xs text-amber-700 font-medium">Change request pending approval</span>
+            ) : (
+              <button
+                onClick={() => onRequest(task)}
+                className="text-xs text-blue-600 hover:underline font-medium"
+              >
+                Request status or deadline change
+              </button>
+            )
+          )}
+          {isOwner && (
             <button
               onClick={() => onDelete(task.id)}
               className="text-xs text-red-500 hover:underline font-medium"

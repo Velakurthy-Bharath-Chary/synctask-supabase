@@ -6,8 +6,9 @@ from app.database import get_db
 from app.core.dependencies import get_current_user
 from app.core.ws_manager import ws_manager
 from app.models.user import User
-from app.schemas.project import ProjectCreate, ProjectUpdate, ProjectOut, JoinProject
+from app.schemas.project import ProjectCreate, ProjectUpdate, ProjectOut, ProjectBrowseOut
 from app.services import project_service
+from app.services import task_service
 
 router = APIRouter(prefix="/projects", tags=["Projects"])
 
@@ -29,12 +30,21 @@ def list_my_projects(
     return project_service.get_user_projects(db, current_user.id)
 
 
-@router.get("/all", response_model=List[ProjectOut])
+@router.get("/all", response_model=List[ProjectBrowseOut])
 def list_all_projects(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     return project_service.get_all_projects(db)
+
+
+@router.get("/{project_id}/assignable-users")
+def list_assignable_users(
+    project_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return task_service.get_assignable_users(db, project_id, current_user.id)
 
 
 @router.get("/{project_id}", response_model=ProjectOut)
@@ -82,23 +92,3 @@ async def delete_project(
         "project_name": project_name,
         "by": current_user.username,
     })
-
-
-@router.post("/join", status_code=200)
-async def join_project(
-    data: JoinProject,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    project_service.join_project(db, data.project_id, current_user.id, data.role)
-    await ws_manager.broadcast_to_project(str(data.project_id), {
-        "event": "member_joined",
-        "project_id": str(data.project_id),
-        "member": {
-            "id": str(current_user.id),
-            "username": current_user.username,
-            "role": data.role.value,
-        },
-        "by": current_user.username,
-    })
-    return {"message": "Joined project successfully"}

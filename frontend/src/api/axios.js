@@ -1,6 +1,6 @@
 import axios from "axios";
 
-const getApiBaseUrl = () => {
+export const getApiBaseUrl = () => {
   const configured = process.env.REACT_APP_API_URL || "http://localhost:8000/api";
   const hostname = window.location.hostname;
   const isLocalHostInConfig =
@@ -30,6 +30,9 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (res) => res,
   (err) => {
+    if (err.response?.status === 401 && err.config?.headers?.Authorization) {
+      window.dispatchEvent(new Event("auth:expired"));
+    }
     return Promise.reject(err);
   }
 );

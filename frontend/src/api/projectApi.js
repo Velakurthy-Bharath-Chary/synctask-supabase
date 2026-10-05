@@ -6,4 +6,4 @@ export const getProject = (id) => api.get(`/projects/${id}`);
 export const createProject = (data) => api.post("/projects", data);
 export const updateProject = (id, data) => api.put(`/projects/${id}`, data);
 export const deleteProject = (id) => api.delete(`/projects/${id}`);
-export const joinProject = (project_id) => api.post("/projects/join", { project_id });
+export const getAssignableUsers = (projectId) => api.get(`/projects/${projectId}/assignable-users`);

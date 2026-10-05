@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from datetime import datetime
 from typing import Optional, List
 from enum import Enum
@@ -35,6 +35,18 @@ class TaskUpdate(BaseModel):
     deadline: Optional[datetime] = None
     assigned_to: Optional[UUID] = None
     is_archived: Optional[bool] = None
+
+
+class TaskRequestCreate(BaseModel):
+    request_type: str
+    requested_status: Optional[TaskStatus] = None
+    requested_deadline: Optional[datetime] = None
+    message: Optional[str] = Field(default=None, max_length=1000)
+
+
+class TaskRequestDecision(BaseModel):
+    approve: bool
+    decision_note: Optional[str] = Field(default=None, max_length=1000)
 
 
 class TaskOut(BaseModel):
@@ -84,3 +96,34 @@ class ActivityLogOut(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class TaskRequestUserOut(BaseModel):
+    id: UUID
+    username: str
+
+    class Config:
+        from_attributes = True
+
+
+class TaskRequestOut(BaseModel):
+    id: UUID
+    task_id: UUID
+    requester_id: UUID
+    request_type: str
+    requested_status: Optional[TaskStatus]
+    requested_deadline: Optional[datetime]
+    message: Optional[str]
+    status: str
+    decision_note: Optional[str]
+    decided_at: Optional[datetime]
+    created_at: datetime
+    requester: TaskRequestUserOut
+    task_title: str
+
+    class Config:
+        from_attributes = True
+
+
+class AssignableUserOut(TaskRequestUserOut):
+    has_active_task: bool

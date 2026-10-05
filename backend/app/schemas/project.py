@@ -49,11 +49,10 @@ class ProjectOut(BaseModel):
         from_attributes = True
 
 
-class JoinProject(BaseModel):
-    project_id: UUID
-    role: ProjectRole = ProjectRole.member
-
-
-class AddMember(BaseModel):
-    user_id: UUID
-    role: ProjectRole = ProjectRole.member
+class ProjectBrowseOut(BaseModel):
+    id: UUID
+    name: str
+    description: Optional[str]
+    owner_id: UUID
+    created_at: datetime
+    member_count: int

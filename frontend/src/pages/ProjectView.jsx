@@ -1,10 +1,12 @@
 import { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
-import { getProject } from "../api/projectApi";
-import { getTasks, createTask, updateTask, deleteTask } from "../api/taskApi";
+import { getProject, getAssignableUsers } from "../api/projectApi";
+import { getTasks, createTask, updateTask, deleteTask, getTaskRequests, createTaskRequest, decideTaskRequest } from "../api/taskApi";
 import { useWebSocket } from "../context/WebSocketContext";
 import TaskCard from "../components/TaskCard";
 import TaskModal from "../components/TaskModal";
+import TaskRequestModal from "../components/TaskRequestModal";
+import { useAuth } from "../context/AuthContext";
 
 const COLUMNS = ["TODO", "IN_PROGRESS", "DONE"];
 const COLUMN_LABELS = {
@@ -17,13 +19,28 @@ export default function ProjectView() {
   const { projectId } = useParams();
   const navigate = useNavigate();
   const { connectToProject, subscribe } = useWebSocket();
+  const { user } = useAuth();
 
   const [project, setProject] = useState(null);
   const [tasks, setTasks] = useState([]);
+  const [taskRequests, setTaskRequests] = useState([]);
+  const [assignableUsers, setAssignableUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [editingTask, setEditingTask] = useState(null);
   const [showModal, setShowModal] = useState(false);
+  const [requestingTask, setRequestingTask] = useState(null);
+  const [assignableUsersError, setAssignableUsersError] = useState("");
+  const [assignableUsersLoading, setAssignableUsersLoading] = useState(false);
   const [error, setError] = useState("");
+
+  const refreshTaskRequests = useCallback(async () => {
+    try {
+      const response = await getTaskRequests(projectId);
+      setTaskRequests(response.data);
+    } catch {
+      // Keep the board usable if the request panel is temporarily unavailable.
+    }
+  }, [projectId]);
 
   const fetchData = useCallback(async () => {
     try {
@@ -33,12 +50,16 @@ export default function ProjectView() {
       ]);
       setProject(projRes.data);
       setTasks(taskRes.data);
+      setError("");
+
+      setLoading(false);
+      void refreshTaskRequests();
     } catch (err) {
       setError("Failed to load project. You may not have access.");
     } finally {
       setLoading(false);
     }
-  }, [projectId]);
+  }, [projectId, refreshTaskRequests]);
 
   useEffect(() => {
     fetchData();
@@ -62,6 +83,9 @@ export default function ProjectView() {
       setTasks((prev) => prev.filter((t) => t.id !== msg.task_id));
     });
 
+    const unsubTaskRequest = subscribe("task_request_created", refreshTaskRequests);
+    const unsubTaskDecision = subscribe("task_request_decided", refreshTaskRequests);
+
     const unsubProjectUpdate = subscribe("project_updated", (msg) => {
       if (msg?.project?.id === projectId) {
         setProject((prev) => ({ ...prev, ...msg.project }));
@@ -84,22 +108,40 @@ export default function ProjectView() {
       unsubCreate();
       unsubUpdate();
       unsubDelete();
+      unsubTaskRequest();
+      unsubTaskDecision();
       unsubProjectUpdate();
       unsubMemberJoined();
       unsubProjectDelete();
     };
-  }, [projectId, connectToProject, subscribe, fetchData, navigate]);
+  }, [projectId, connectToProject, subscribe, fetchData, refreshTaskRequests, navigate]);
+
+  const openTaskModal = (task = null) => {
+    setEditingTask(task);
+    setShowModal(true);
+    setAssignableUsersError("");
+    setAssignableUsersLoading(true);
+    getAssignableUsers(projectId)
+      .then((response) => setAssignableUsers(response.data))
+      .catch(() => setAssignableUsersError("Could not load employees. Close and reopen this form to try again."))
+      .finally(() => setAssignableUsersLoading(false));
+  };
 
   const handleSaveTask = async (formData) => {
     try {
+      let savedTask;
       if (editingTask?.id) {
-        await updateTask(editingTask.id, formData);
+        const response = await updateTask(editingTask.id, formData);
+        savedTask = response.data;
+        setTasks((current) => current.map((task) => task.id === savedTask.id ? savedTask : task));
       } else {
-        await createTask(projectId, formData);
+        const response = await createTask(projectId, formData);
+        savedTask = response.data;
+        setTasks((current) => current.some((task) => task.id === savedTask.id) ? current : [...current, savedTask]);
       }
-      await fetchData();
       setShowModal(false);
       setEditingTask(null);
+      void fetchData();
     } catch (err) {
       alert(err.response?.data?.detail || "Failed to save task.");
     }
@@ -109,9 +151,42 @@ export default function ProjectView() {
     if (!window.confirm("Delete this task?")) return;
     try {
       await deleteTask(taskId);
-      await fetchData();
+      setTasks((current) => current.filter((task) => task.id !== taskId));
     } catch (err) {
       alert("Failed to delete task.");
+    }
+  };
+
+  const handleRequestTaskChange = async (data) => {
+    try {
+      const response = await createTaskRequest(requestingTask.id, data);
+      setTaskRequests((current) => [response.data, ...current]);
+      setRequestingTask(null);
+    } catch (err) {
+      alert(err.response?.data?.detail || "Failed to submit request.");
+    }
+  };
+
+  const handleRequestDecision = async (request, approve) => {
+    const note = approve ? null : window.prompt("Reason for rejecting this request:");
+    if (!approve && note === null) return;
+    if (!approve && !note.trim()) {
+      alert("Please enter a reason so the employee understands the decision.");
+      return;
+    }
+    try {
+      const response = await decideTaskRequest(request.id, { approve, decision_note: note || null });
+      setTaskRequests((current) => current.map((item) => item.id === request.id ? response.data : item));
+      if (approve) {
+        setTasks((current) => current.map((task) => {
+          if (task.id !== response.data.task_id) return task;
+          return response.data.request_type === "STATUS"
+            ? { ...task, status: response.data.requested_status }
+            : { ...task, deadline: response.data.requested_deadline };
+        }));
+      }
+    } catch (err) {
+      alert(err.response?.data?.detail || "Failed to update request.");
     }
   };
 
@@ -134,6 +209,8 @@ export default function ProjectView() {
     acc[status] = tasks.filter((t) => t.status === status);
     return acc;
   }, {});
+  const isOwner = project?.owner_id === user?.id;
+  const visibleRequests = taskRequests.filter((request) => isOwner ? request.status === "PENDING" : true);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -163,12 +240,12 @@ export default function ProjectView() {
             >
               📊 Analytics
             </Link>
-            <button
-              onClick={() => { setEditingTask(null); setShowModal(true); }}
+            {isOwner && <button
+              onClick={() => openTaskModal()}
               className="bg-blue-600 text-white px-4 py-1.5 rounded-lg text-sm font-medium hover:bg-blue-700"
             >
               + Add Task
-            </button>
+            </button>}
           </div>
         </div>
       </div>
@@ -197,7 +274,10 @@ export default function ProjectView() {
                       key={task.id}
                       task={task}
                       members={project?.members}
-                      onEdit={(task) => { setEditingTask(task); setShowModal(true); }}
+                      isOwner={isOwner}
+                      hasPendingRequest={taskRequests.some((request) => request.task_id === task.id && request.requester_id === user?.id && request.status === "PENDING")}
+                      onEdit={openTaskModal}
+                      onRequest={setRequestingTask}
                       onDelete={handleDeleteTask}
                     />
                   ))
@@ -207,6 +287,32 @@ export default function ProjectView() {
           ))}
         </div>
       </div>
+
+      {visibleRequests.length > 0 && (
+        <div className="max-w-7xl mx-auto px-4 pb-8">
+          <section className="bg-white rounded-xl border shadow-sm p-4">
+            <h3 className="font-semibold text-gray-700 mb-3">{isOwner ? "Pending employee requests" : "My task requests"}</h3>
+            <div className="space-y-3">
+              {visibleRequests.map((request) => (
+                <article key={request.id} className="border rounded-lg p-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                  <div className="text-sm">
+                    <p className="font-medium text-gray-800">{request.task_title} · {request.request_type === "STATUS" ? "Status approval" : "Deadline extension"}</p>
+                    <p className="text-gray-600 mt-1">
+                      {request.request_type === "STATUS" ? `Requested status: ${request.requested_status?.replace("_", " ")}` : `Requested deadline: ${request.requested_deadline ? new Date(request.requested_deadline).toLocaleString() : "—"}`}
+                    </p>
+                    <p className="text-gray-500 mt-1">{isOwner ? request.requester.username : "You"}{request.message ? ` · ${request.message}` : ""}</p>
+                    {!isOwner && request.status !== "PENDING" && <p className="text-gray-500 mt-1">{request.status}{request.decision_note ? ` · ${request.decision_note}` : ""}</p>}
+                  </div>
+                  {isOwner && <div className="flex gap-2 shrink-0">
+                    <button onClick={() => handleRequestDecision(request, true)} className="text-sm bg-green-600 text-white px-3 py-1.5 rounded-lg hover:bg-green-700">Approve</button>
+                    <button onClick={() => handleRequestDecision(request, false)} className="text-sm bg-white border border-red-200 text-red-600 px-3 py-1.5 rounded-lg hover:bg-red-50">Reject</button>
+                  </div>}
+                </article>
+              ))}
+            </div>
+          </section>
+        </div>
+      )}
 
       {/* Team Members */}
       <div className="max-w-7xl mx-auto px-4 pb-8">
@@ -232,9 +338,18 @@ export default function ProjectView() {
       {showModal && (
         <TaskModal
           task={editingTask}
-          members={project?.members}
+          members={assignableUsers}
+          membersError={assignableUsersError}
+          membersLoading={assignableUsersLoading}
           onSave={handleSaveTask}
           onClose={() => { setShowModal(false); setEditingTask(null); }}
+        />
+      )}
+      {requestingTask && (
+        <TaskRequestModal
+          task={requestingTask}
+          onSubmit={handleRequestTaskChange}
+          onClose={() => setRequestingTask(null)}
         />
       )}
     </div>

@@ -1,30 +1,80 @@
-import { useState, useEffect } from "react";
-import { getMyProjects, getAllProjects, createProject, joinProject } from "../api/projectApi";
+import { useState, useEffect, useCallback } from "react";
+import { getMyProjects, getAllProjects, createProject } from "../api/projectApi";
 import ProjectCard from "../components/ProjectCard";
+import { useWebSocket } from "../context/WebSocketContext";
 
 export default function Dashboard() {
+  const { subscribe } = useWebSocket();
   const [myProjects, setMyProjects] = useState([]);
   const [allProjects, setAllProjects] = useState([]);
   const [tab, setTab] = useState("mine");
   const [showCreate, setShowCreate] = useState(false);
   const [newProject, setNewProject] = useState({ name: "", description: "" });
   const [loading, setLoading] = useState(true);
+  const [browseLoading, setBrowseLoading] = useState(false);
+  const [browseLoaded, setBrowseLoaded] = useState(false);
   const [error, setError] = useState("");
 
-  const fetchProjects = async () => {
-    setLoading(true);
+  const fetchMyProjects = useCallback(async (quiet = true) => {
+    if (!quiet) setLoading(true);
     try {
-      const [mine, all] = await Promise.all([getMyProjects(), getAllProjects()]);
+      const mine = await getMyProjects();
       setMyProjects(mine.data);
-      setAllProjects(all.data);
     } catch {
       setError("Failed to load projects.");
     } finally {
-      setLoading(false);
+      if (!quiet) setLoading(false);
     }
-  };
+  }, []);
 
-  useEffect(() => { fetchProjects(); }, []);
+  const fetchBrowseProjects = useCallback(async () => {
+    setBrowseLoading(true);
+    try {
+      const response = await getAllProjects();
+      setAllProjects(response.data);
+      setBrowseLoaded(true);
+    } catch {
+      setError("Failed to load projects to browse.");
+    } finally {
+      setBrowseLoading(false);
+    }
+  }, []);
+
+  const loadInitialProjects = useCallback(async () => {
+    setLoading(true);
+    setBrowseLoading(true);
+    const [mine, browse] = await Promise.allSettled([getMyProjects(), getAllProjects()]);
+    if (mine.status === "fulfilled") {
+      setMyProjects(mine.value.data);
+    } else {
+      setError("Failed to load projects.");
+    }
+    if (browse.status === "fulfilled") {
+      setAllProjects(browse.value.data);
+      setBrowseLoaded(true);
+    } else {
+      setError("Failed to load projects to browse.");
+    }
+    setLoading(false);
+    setBrowseLoading(false);
+  }, []);
+
+  useEffect(() => {
+    // Load both lists together so projects already in My Projects never flash
+    // in Browse before membership data arrives.
+    void loadInitialProjects();
+    const refresh = setInterval(() => {
+      void fetchMyProjects(true);
+      void fetchBrowseProjects();
+    }, 30000);
+    return () => clearInterval(refresh);
+  }, [fetchMyProjects, fetchBrowseProjects, loadInitialProjects]);
+
+  useEffect(() => subscribe("project_deleted", (message) => {
+    const deletedId = String(message.project_id);
+    setMyProjects((projects) => projects.filter((project) => String(project.id) !== deletedId));
+    setAllProjects((projects) => projects.filter((project) => String(project.id) !== deletedId));
+  }), [subscribe]);
 
   const handleCreate = async (e) => {
     e.preventDefault();
@@ -32,18 +82,10 @@ export default function Dashboard() {
       await createProject(newProject);
       setNewProject({ name: "", description: "" });
       setShowCreate(false);
-      await fetchProjects();
+      void fetchMyProjects(true);
+      if (browseLoaded) void fetchBrowseProjects();
     } catch (err) {
       setError(err.response?.data?.detail || "Failed to create project.");
-    }
-  };
-
-  const handleJoin = async (projectId) => {
-    try {
-      await joinProject(projectId);
-      await fetchProjects();
-    } catch (err) {
-      alert(err.response?.data?.detail || "Failed to join project.");
     }
   };
 
@@ -78,7 +120,10 @@ export default function Dashboard() {
           {["mine", "browse"].map((t) => (
             <button
               key={t}
-              onClick={() => setTab(t)}
+              onClick={() => {
+                setTab(t);
+                if (t === "browse") void fetchBrowseProjects();
+              }}
               className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors
                 ${tab === t
                   ? "bg-blue-600 text-white"
@@ -101,16 +146,18 @@ export default function Dashboard() {
             <div className="text-center py-16 text-gray-400">
               <p className="text-lg mb-2">No projects yet</p>
               <p className="text-sm">
-                Create a new project or browse existing ones to join.
+                Create a project, or ask its owner to assign you a task to join its team.
               </p>
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {myProjects.map((p) => (
-                <ProjectCard key={p.id} project={p} isMember={true} onDeleted={fetchProjects} />
+                <ProjectCard key={p.id} project={p} isMember={true} onDeleted={fetchMyProjects} />
               ))}
             </div>
           )
+        ) : browseLoading ? (
+          <div className="text-center py-16 text-gray-400">Loading projects to browse...</div>
         ) : (
           browsableProjects.length === 0 ? (
             <div className="text-center py-16 text-gray-400">
@@ -121,12 +168,7 @@ export default function Dashboard() {
               {browsableProjects.map((p) => (
                 <div key={p.id} className="bg-white rounded-xl border shadow p-5">
                   <ProjectCard project={p} isMember={false} />
-                  <button
-                    onClick={() => handleJoin(p.id)}
-                    className="mt-3 w-full text-sm bg-blue-50 text-blue-600 border border-blue-200 py-1.5 rounded-lg hover:bg-blue-100 font-medium"
-                  >
-                    Join Project
-                  </button>
+                  <p className="mt-3 text-center text-xs text-gray-500">Ask the project owner to assign you a task to join.</p>
                 </div>
               ))}
             </div>

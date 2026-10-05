@@ -19,7 +19,8 @@ def register_user(db: Session, data: UserCreate) -> User:
         username=data.username,
         email=data.email,
         hashed_password=hash_password(data.password),
-        role=data.role,
+        # Privileges come from Project.owner_id, never from client registration data.
+        role="member",
         full_name=data.full_name,
     )
     db.add(user)
