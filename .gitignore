@@ -4,6 +4,11 @@
 backend/.env
 frontend/.env
 
+# Share templates, never actual local environment files
+!.env.example
+!backend/.env.example
+!frontend/.env.example
+
 # Python environments and generated files
 .venv/
 venv/

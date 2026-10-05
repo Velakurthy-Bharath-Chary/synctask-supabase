@@ -35,6 +35,13 @@ pip install -r requirements.txt
 ```
 
 Configure the backend’s local `backend/.env` with your database and authentication settings. Do not commit this file.
+Start from the safe template:
+
+```powershell
+Copy-Item backend/.env.example backend/.env
+```
+
+Then edit `backend/.env`: set `DATABASE_URL` to your PostgreSQL connection string and replace `SECRET_KEY` with a unique value. Generate one with `python -c "import secrets; print(secrets.token_urlsafe(48))"`. If `backend/.env` already exists, keep it and copy only any missing settings from the example instead of overwriting it.
 
 Then start the API:
 
@@ -51,6 +58,14 @@ cd frontend
 npm install
 npm start
 ```
+
+The frontend reads `frontend/.env`. Its template uses local development URLs; copy it if you do not already have a local file:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+If `frontend/.env` already exists, do not overwrite it. The frontend adjusts these localhost API and WebSocket URLs to the laptop's hostname when you open the development app from another device on the same Wi-Fi.
 
 Open `http://localhost:3000` on the laptop. The API is at `http://localhost:8000`; API documentation is at `http://localhost:8000/docs`.
 
